@@ -13,6 +13,7 @@ My learning notes for **Stripe Billing**: how to sell subscriptions (and one-tim
 | See how Stripe fits into an app (diagrams) | [Architecture](docs/architecture.md) |
 | See how much of Stripe's official guide is covered | [Guide coverage](docs/day-01/stripe-guide-coverage.md) |
 | Read example responses and event logs | [samples/day-01](samples/day-01/) |
+| Read it as a web page (plain language, with the technical detail underneath) | [Live page](https://eshan-one.github.io/stripe-billing-101/) |
 
 ## Progress
 
@@ -28,6 +29,8 @@ My learning notes for **Stripe Billing**: how to sell subscriptions (and one-tim
 stripe-billing-101/
 ├── README.md
 ├── .gitignore                       blocks keys and env files
+├── .nojekyll                        serve the page as-is on GitHub Pages
+├── index.html                       the public web page (GitHub Pages)
 ├── docs/
 │   ├── concepts.md                  vocabulary, objects, ID prefixes
 │   ├── architecture.md              flows and object model (Mermaid)

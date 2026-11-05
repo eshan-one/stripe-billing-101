@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="A plain-language walkthrough of how an engineer learned Stripe subscription billing in a practice account, with the technical commands, diagrams and findings underneath.">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Stripe Subscriptions, Explained">
+<meta property="og:description" content="A plain-language walkthrough of how an engineer learned Stripe subscription billing in a practice account, with the technical commands, diagrams and findings underneath.">
+<title>Stripe Subscriptions, Explained</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one left-aligned reading column. Hero pairs the headline with a tilted till receipt. Each section reads plain-language first, then a bordered "Technical detail" panel (switchable) with commands, tables and diagrams. */
+  :root {
+    --bg: #F2F4F6;
+    --surface: #FFFFFF;
+    --ink: #0E1B2B;
+    --muted: #4B5A6C;
+    --line: #D3DAE2;
+    --accent: #0B7A75;
+    --accent-ink: #05403D;
+    --accent-soft: #DDF1EE;
+    --warn: #B4400E;
+    --warn-soft: #FBE6DA;
+    --stripe-chip: #0E1B2B;
+    --stripe-chip-ink: #F2F4F6;
+    --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+    --font-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0C1520; --surface: #122030; --ink: #E6EDF5; --muted: #9DB0C4; --line: #24384D;
+      --accent: #4FD1C5; --accent-ink: #A7F0E8; --accent-soft: #12383A;
+      --warn: #F59E6B; --warn-soft: #3A2418;
+      --stripe-chip: #E6EDF5; --stripe-chip-ink: #0C1520;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0C1520; --surface: #122030; --ink: #E6EDF5; --muted: #9DB0C4; --line: #24384D;
+    --accent: #4FD1C5; --accent-ink: #A7F0E8; --accent-soft: #12383A;
+    --warn: #F59E6B; --warn-soft: #3A2418;
+    --stripe-chip: #E6EDF5; --stripe-chip-ink: #0C1520;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 17px; line-height: 1.65; margin: 0; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1, h2, h3 { font-family: var(--font-display); line-height: 1.12; letter-spacing: -0.01em; text-wrap: balance; margin: 0; }
+  h2 { font-size: clamp(1.6rem, 3.4vw, 2.3rem); font-weight: 700; }
+  h3 { font-size: 1.15rem; font-weight: 700; }
+  p { margin: 0; }
+  a { color: var(--accent); text-underline-offset: 3px; overflow-wrap: anywhere; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+  code, pre, .mono { font-family: var(--font-mono); }
+  :not(pre) > code { font-size: 0.88em; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; overflow-wrap: anywhere; }
+  .lead { font-size: 1.15rem; color: var(--muted); max-width: 62ch; }
+  .read { max-width: 66ch; }
+
+  .topbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-block: 20px; font-size: 0.82rem; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+  .topbar b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); white-space: nowrap; }
+
+  .hero { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr); gap: 56px; align-items: center; padding-block: 32px 56px; }
+  h1 { font-size: clamp(2.3rem, 6.2vw, 4.6rem); font-weight: 800; letter-spacing: -0.025em; overflow-wrap: anywhere; }
+  .hero .lead { margin-top: 22px; }
+
+  .switch { margin-top: 26px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+  .switch .lab { font-family: var(--font-mono); font-size: 0.78rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+  .seg { display: inline-flex; border: 1px solid var(--ink); border-radius: 999px; overflow: hidden; }
+  .seg button { font: inherit; font-size: 0.92rem; font-weight: 500; padding: 9px 16px; border: 0; background: transparent; color: var(--ink); cursor: pointer; min-height: 44px; }
+  .seg button + button { border-left: 1px solid var(--ink); }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+  .receipt { position: relative; background: var(--surface); border: 1px solid var(--line); padding: 24px 24px 20px; font-family: var(--font-mono); font-size: 0.92rem; line-height: 1.8; transform: rotate(1.4deg); margin-bottom: 14px; }
+  .receipt::after { content: ""; position: absolute; left: -1px; right: -1px; bottom: -9px; height: 9px; background: linear-gradient(135deg, var(--surface) 25%, transparent 25%) -8px 0, linear-gradient(225deg, var(--surface) 25%, transparent 25%) -8px 0; background-size: 16px 16px; }
+  .receipt .rh { display: flex; justify-content: space-between; gap: 12px; font-weight: 500; letter-spacing: 0.12em; }
+  .receipt .rule { border: 0; border-top: 1px dashed var(--line); margin: 12px 0; }
+  .receipt .row { display: flex; justify-content: space-between; gap: 12px; }
+  .receipt .row span:first-child { color: var(--muted); }
+  .receipt .total { font-weight: 500; font-size: 1.12rem; }
+  .receipt .stamp { display: inline-block; border: 2px solid var(--accent); color: var(--accent); padding: 0 10px; letter-spacing: 0.14em; font-weight: 500; }
+  .receipt .foot { margin-top: 14px; font-size: 0.78rem; color: var(--muted); line-height: 1.5; }
+
+  .sec { border-top: 1px solid var(--line); padding-block: 60px; }
+  .sec > h2 + * { margin-top: 16px; }
+  .sec .read + .read { margin-top: 14px; }
+
+  .four { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 56px; margin-top: 30px; }
+  .four > div { border-top: 3px solid var(--ink); padding-top: 14px; }
+  .four h3 { margin-bottom: 6px; }
+  .four p { color: var(--muted); }
+
+  .who { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 28px; }
+  .who > div { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; border-radius: 6px; }
+  .who p { color: var(--muted); margin-top: 8px; font-size: 0.98rem; }
+
+  .chip { display: inline-block; font-family: var(--font-mono); font-size: 0.76rem; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 10px; border-radius: 4px; border: 1px solid var(--ink); white-space: nowrap; }
+  .chip.app { background: var(--accent-soft); color: var(--accent-ink); border-color: var(--accent); }
+  .chip.stripe { background: var(--stripe-chip); color: var(--stripe-chip-ink); border-color: var(--stripe-chip); }
+  .chip.cust { background: transparent; color: var(--ink); border-style: dashed; }
+
+  .terms { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; margin-top: 28px; }
+  .terms > div { border-left: 3px solid var(--accent); padding-left: 16px; }
+  .terms .q { font-family: var(--font-mono); font-size: 0.88rem; color: var(--muted); margin-top: 6px; }
+  .callout { margin-top: 26px; padding: 18px 22px; background: var(--accent-soft); color: var(--accent-ink); border-radius: 6px; max-width: 74ch; }
+
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 32px 0 0; border-left: 2px solid var(--line); }
+  ol.steps li { counter-increment: s; position: relative; display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 18px; padding: 0 0 24px 30px; }
+  ol.steps li::before { content: counter(s); position: absolute; left: -15px; top: 0; width: 28px; height: 28px; border-radius: 50%; background: var(--ink); color: var(--bg); font-family: var(--font-mono); font-size: 0.85rem; display: grid; place-items: center; }
+  ol.steps li:last-child { padding-bottom: 0; }
+  ol.steps .t { font-weight: 500; }
+  ol.steps .d { color: var(--muted); font-size: 0.97rem; }
+
+  /* Technical panels */
+  .tech { margin-top: 30px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 20px 22px 22px; min-width: 0; }
+  .tech > .tl { display: inline-block; font-family: var(--font-mono); font-size: 0.74rem; letter-spacing: 0.12em; text-transform: uppercase; background: var(--ink); color: var(--bg); padding: 3px 10px; border-radius: 4px; margin-bottom: 14px; }
+  .tech h3 { font-size: 1.02rem; margin: 22px 0 8px; }
+  .tech h3:first-of-type { margin-top: 0; }
+  .tech p { margin: 10px 0 0; color: var(--muted); font-size: 0.97rem; max-width: 74ch; }
+  .tech p:first-of-type { margin-top: 0; }
+  .wrap[data-detail="plain"] .tech { display: none; }
+
+  .tablewrap { overflow-x: auto; margin-top: 10px; -webkit-overflow-scrolling: touch; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.93rem; }
+  th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-family: var(--font-mono); font-size: 0.76rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+  td code { white-space: nowrap; }
+  table.min { min-width: 520px; }
+
+  .code { position: relative; margin: 10px 0 0; }
+  pre { margin: 0; padding: 16px 18px; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; overflow-x: auto; font-size: 0.83rem; line-height: 1.6; -webkit-overflow-scrolling: touch; }
+  .copy { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 0.76rem; font-family: var(--font-mono); padding: 4px 10px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; min-height: 30px; }
+  .code pre { padding-top: 40px; }
+
+  .diagram { overflow-x: auto; margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); padding: 12px; -webkit-overflow-scrolling: touch; }
+  .diagram pre.mermaid { border: 0; background: transparent; padding: 0; margin: 0; text-align: center; font-size: 0.8rem; }
+  .diagram svg { min-width: 680px; height: auto; }
+  .hint { display: none; font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+
+  .tester { margin-top: 28px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .picks { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px; border-bottom: 1px solid var(--line); }
+  .pick { font: inherit; font-size: 0.95rem; font-weight: 500; padding: 9px 16px; min-height: 44px; border-radius: 999px; border: 1px solid var(--line); background: transparent; color: var(--ink); cursor: pointer; }
+  .pick:hover { border-color: var(--ink); }
+  .pick[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .panel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .panel > div { padding: 20px 22px 22px; min-width: 0; }
+  .panel > div + div { border-left: 1px solid var(--line); }
+  .panel h3 { font-size: 0.78rem; font-family: var(--font-mono); font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .panel .card { font-family: var(--font-mono); font-size: 0.84rem; color: var(--muted); margin-top: 10px; }
+  .evs { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ev { font-family: var(--font-mono); font-size: 0.76rem; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 2px 8px; overflow-wrap: anywhere; }
+  .more { margin-top: 8px; font-size: 0.9rem; color: var(--muted); }
+  .made { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .made li { display: flex; align-items: center; gap: 10px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .dot.yes { background: var(--accent); }
+  .dot.no { background: transparent; border: 2px solid var(--warn); }
+  .made .no-t { color: var(--warn); }
+  .note { margin: 0; padding: 14px 22px; border-top: 1px solid var(--line); font-size: 0.95rem; background: var(--bg); }
+
+  .surprises { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 36px 56px; margin-top: 30px; }
+  .surprises p { color: var(--muted); margin-top: 6px; }
+
+  ol.rules { margin: 10px 0 0; padding-left: 1.3em; display: grid; gap: 8px; max-width: 74ch; color: var(--muted); font-size: 0.97rem; }
+  ol.rules b { color: var(--ink); }
+
+  ol.method { margin: 28px 0 0; padding: 0; list-style: none; counter-reset: m; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 28px; }
+  ol.method li { counter-increment: m; border-top: 1px solid var(--line); padding-top: 12px; }
+  ol.method li::before { content: counter(m); display: block; font-family: var(--font-mono); font-size: 0.85rem; color: var(--accent); margin-bottom: 4px; }
+
+  .qtable { margin-top: 24px; }
+  .todo { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 10px; max-width: 70ch; }
+  .todo li { display: flex; gap: 12px; }
+  .todo li::before { content: ""; width: 14px; height: 14px; margin-top: 7px; border: 2px solid var(--muted); border-radius: 3px; flex: none; }
+
+  dl.gloss { display: grid; grid-template-columns: minmax(120px, 0.3fr) minmax(0, 1fr); gap: 14px 28px; margin: 26px 0 0; }
+  dl.gloss dt { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 500; overflow-wrap: anywhere; }
+  dl.gloss dd { margin: 0; color: var(--muted); }
+
+  footer { border-top: 1px solid var(--line); padding-block: 36px 56px; color: var(--muted); font-size: 0.92rem; }
+  footer p + p { margin-top: 8px; }
+
+  @media (max-width: 860px) {
+    .hero { grid-template-columns: minmax(0, 1fr); gap: 40px; padding-block: 20px 48px; }
+    .receipt { max-width: 420px; }
+    .four, .surprises, .who, .terms { grid-template-columns: minmax(0, 1fr); }
+    ol.method { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .panel { grid-template-columns: minmax(0, 1fr); }
+    .panel > div + div { border-left: 0; border-top: 1px solid var(--line); }
+    ol.steps li { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+    dl.gloss { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    dl.gloss dd { margin-bottom: 14px; }
+    .sec { padding-block: 44px; }
+    .hint { display: block; }
+  }
+  @media (max-width: 520px) {
+    body { font-size: 16px; }
+    ol.method { grid-template-columns: minmax(0, 1fr); }
+    .receipt { transform: none; }
+    .tech { padding: 16px 14px 18px; }
+    .seg button { padding: 9px 12px; font-size: 0.88rem; }
+    pre { font-size: 0.78rem; padding: 14px 12px; }
+    .code pre { padding-top: 40px; }
+    .callout { padding: 16px 16px; }
+  }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap" id="page" data-detail="tech">
+  <div class="topbar"><span>Engineering notes for everyone</span><b>about 10 min</b></div>
+
+  <header class="hero">
+    <div>
+      <h1>Stripe Subscriptions, Explained</h1>
+      <p class="lead">A software team wanted customers to pay every month. Before anyone built it, one engineer learned how the payment side works by trying it in a practice account. Each section below explains what happened in plain language, then shows the technical detail underneath.</p>
+      <div class="switch">
+        <span class="lab">Show</span>
+        <div class="seg" role="group" aria-label="Level of detail">
+          <button type="button" id="d-tech" aria-pressed="true">Plain + technical</button>
+          <button type="button" id="d-plain" aria-pressed="false">Plain only</button>
+        </div>
+      </div>
+    </div>
+    <div aria-label="A sample receipt for a monthly subscription">
+      <div class="receipt">
+        <div class="rh"><span>PLUS</span><span>MONTHLY</span></div>
+        <hr class="rule">
+        <div class="row"><span>Plus plan</span><span>1 x $8.00</span></div>
+        <div class="row"><span>Billed</span><span>every month</span></div>
+        <hr class="rule">
+        <div class="row total"><span>Total</span><span>$8.00</span></div>
+        <div class="row"><span>Status</span><span class="stamp">ACTIVE</span></div>
+        <p class="foot">Practice account. No real money moved. Money is saved as whole cents, so this $8.00 is stored as 800.</p>
+      </div>
+    </div>
+  </header>
+
+  <section class="sec" aria-labelledby="short">
+    <h2 id="short">The short version</h2>
+    <div class="four">
+      <div><h3>Practise first</h3><p>Everything was tried in a practice account with play money. No real software had been written yet.</p></div>
+      <div><h3>Watch the messages</h3><p>Stripe sends a stream of small notes such as "payment received". Reading them first showed what the app has to handle.</p></div>
+      <div><h3>Break it on purpose</h3><p>Declined cards, empty accounts and extra bank checks were tested deliberately, because that is where things go wrong.</p></div>
+      <div><h3>Write down what you don't know</h3><p>The engineer kept a short list of open questions, each with a sensible default, for the people who own the product.</p></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="problem">
+    <h2 id="problem">What problem is being solved</h2>
+    <p class="read">Imagine a software product that costs $8 a month. Someone has to collect the card details, charge the card every month, send receipts, retry when a payment fails, and tell the software to switch the plan on or off.</p>
+    <p class="read">Stripe is a company that does that work. The team's app still has to be connected to Stripe, and that connection was the engineer's job.</p>
+    <div class="who">
+      <div><span class="chip cust">Customer</span><p>The person who wants the plan and pays for it.</p></div>
+      <div><span class="chip app">The app</span><p>The team's software. It decides who gets which plan.</p></div>
+      <div><span class="chip stripe">Stripe</span><p>Holds the card, takes the money, sends receipts and reports back.</p></div>
+    </div>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <h3>Setup: sandbox and the Stripe CLI</h3>
+      <p>Everything ran in a Stripe sandbox, so no real money moves. Two terminal tabs: one for commands, one for the event stream.</p>
+      <div class="code"><pre><code>brew install stripe/stripe-cli/stripe
+stripe login
+stripe products list --limit 3</code></pre></div>
+      <p>The CLI makes the same API calls the backend will make, so the raw requests and responses are visible before any app code exists.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="words">
+    <h2 id="words">Payments, billing and subscriptions</h2>
+    <p class="read">These three words sound alike, and sorting them out was the first useful hour. The page the engineer opened first was about one-time payments, which is not what a subscription needs.</p>
+    <div class="terms">
+      <div><h3>Payments</h3><p>Moving money once.</p><p class="q">"Take $100 now"</p></div>
+      <div><h3>Billing</h3><p>Charging again and again, with invoices and retries.</p><p class="q">"Charge $100 every month"</p></div>
+      <div><h3>Subscription</h3><p>One customer's ongoing plan.</p><p class="q">"Acme is on the Pro plan, monthly"</p></div>
+    </div>
+    <p class="callout">A <b>product</b> is what you sell, like a menu item. A <b>price</b> is the tag on it. They are kept separate so a price can change without rewriting the menu.</p>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <p>Billing sits on top of Payments: a subscription creates an invoice each period, and Stripe collects it through the Payments machinery. For this task, plans were Billing and credit packs were Payments. Subscriptions live under Revenue, then Billing in Stripe's docs.</p>
+      <h3>Product and price, created in the Dashboard</h3>
+      <p>Name <code>Plus</code>, price <code>8</code> USD, recurring monthly. Then read what was created:</p>
+      <div class="code"><pre><code>stripe prices list --limit 3</code></pre></div>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>Field</th><th>Value</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>unit_amount</code></td><td><code>800</code></td><td>$8.00. Money is in cents.</td></tr>
+          <tr><td><code>recurring.interval</code></td><td><code>month</code></td><td>Charged monthly</td></tr>
+          <tr><td><code>billing_scheme</code></td><td><code>per_unit</code></td><td>Amount = unit price x quantity. This is how per-seat pricing works later.</td></tr>
+          <tr><td><code>lookup_key</code></td><td><code>null</code></td><td>Optional stable name. IDs differ between sandbox and live, so code can look prices up by name.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>ID prefixes worth knowing</h3>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>Prefix</th><th>Object</th><th>Prefix</th><th>Object</th></tr></thead>
+        <tbody>
+          <tr><td><code>prod_</code></td><td>Product</td><td><code>in_</code></td><td>Invoice</td></tr>
+          <tr><td><code>price_</code></td><td>Price</td><td><code>pi_</code></td><td>PaymentIntent</td></tr>
+          <tr><td><code>cus_</code></td><td>Customer</td><td><code>cs_test_</code></td><td>Checkout Session</td></tr>
+          <tr><td><code>sub_</code></td><td>Subscription</td><td><code>evt_</code></td><td>Event</td></tr>
+          <tr><td><code>si_</code></td><td>Subscription item</td><td><code>whsec_</code></td><td>Webhook signing secret (never commit)</td></tr>
+        </tbody>
+      </table></div>
+      <p>Requests are form-encoded and responses are JSON. Nested fields use brackets such as <code>line_items[0][price]</code>, and in zsh the whole argument must be quoted.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="journey">
+    <h2 id="journey">One purchase, step by step</h2>
+    <p class="read">This is what happens between a customer clicking Subscribe and the plan switching on.</p>
+    <ol class="steps">
+      <li><span><span class="chip cust">Customer</span></span><div><div class="t">Clicks Subscribe</div></div></li>
+      <li><span><span class="chip app">The app</span></span><div><div class="t">Asks Stripe for a payment page</div><div class="d">It also attaches a note saying which customer organisation this is, so the answer can be matched up later.</div></div></li>
+      <li><span><span class="chip stripe">Stripe</span></span><div><div class="t">Opens an unpaid order form</div><div class="d">This form is not the subscription yet. Nothing exists until someone pays.</div></div></li>
+      <li><span><span class="chip cust">Customer</span></span><div><div class="t">Enters their card on Stripe's page</div></div></li>
+      <li><span><span class="chip stripe">Stripe</span></span><div><div class="t">Charges the card and creates the records</div><div class="d">A customer record, a subscription and the first invoice.</div></div></li>
+      <li><span><span class="chip stripe">Stripe</span></span><div><div class="t">Sends the app a handful of messages</div><div class="d">These messages are called webhooks.</div></div></li>
+      <li><span><span class="chip app">The app</span></span><div><div class="t">Checks the message is genuine and switches the plan on</div><div class="d">It never trusts the customer's browser for this. Only the messages count.</div></div></li>
+    </ol>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <h3>The flow as a sequence</h3>
+      <div class="diagram"><pre class="mermaid">sequenceDiagram
+  autonumber
+  actor U as Customer
+  participant FE as Frontend
+  participant BE as Your backend
+  participant ST as Stripe
+  U-&gt;&gt;FE: Click Subscribe
+  FE-&gt;&gt;BE: Create checkout session for a plan
+  BE-&gt;&gt;ST: POST /v1/checkout/sessions with price and metadata
+  ST--&gt;&gt;BE: session id and url
+  BE--&gt;&gt;FE: url
+  FE-&gt;&gt;U: Redirect to the Stripe page
+  U-&gt;&gt;ST: Enter card, confirm (3D Secure if asked)
+  ST--&gt;&gt;U: Redirect to success_url
+  ST-&gt;&gt;BE: Webhooks: customer.subscription.created, invoice.paid, checkout.session.completed
+  BE-&gt;&gt;BE: Verify signature, skip repeats, find the org, save state
+  FE-&gt;&gt;BE: Billing page asks for status
+  BE--&gt;&gt;FE: plan, status, next billing date</pre></div>
+      <p class="hint">Swipe sideways to see the whole diagram.</p>
+      <h3>Creating the Checkout Session with the CLI</h3>
+      <div class="code"><pre><code>stripe checkout sessions create \
+  -d mode=subscription \
+  -d success_url=https://example.com/success \
+  -d "line_items[0][price]=&lt;PRICE_ID&gt;" \
+  -d "line_items[0][quantity]=1"</code></pre></div>
+      <h3>The same request with curl, as the backend would send it</h3>
+      <div class="code"><pre><code>curl https://api.stripe.com/v1/checkout/sessions \
+  -u "$STRIPE_SECRET_KEY:" \
+  -d mode=subscription \
+  -d success_url=https://example.com/success \
+  -d "line_items[0][price]=&lt;PRICE_ID&gt;" \
+  -d "line_items[0][quantity]=1" \
+  -d "managed_payments[enabled]=false"</code></pre></div>
+      <h3>An error nobody expected</h3>
+      <p>The account had Managed Payments on by default and the test product had no tax code, so the first call failed:</p>
+      <div class="code"><pre><code>{
+  "error": {
+    "message": "Invalid line_items[0]: the product tax code is missing ... Product tax code is required for Managed Payments, which is enabled by default on your account. If you want to disable Managed Payments on this session, you can pass managed_payments[enabled]=false ...",
+    "type": "invalid_request_error"
+  }
+}</code></pre></div>
+      <p>The fix was the one extra parameter <code>-d "managed_payments[enabled]=false"</code>, which changes nothing account-wide. The account setting itself was left alone and raised as a question.</p>
+      <h3>What the Checkout Session response contains</h3>
+      <p>It is an open order form, not the subscription.</p>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>Field</th><th>Value</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td><code>url</code></td><td><code>https://checkout.stripe.com/...</code></td><td>The field the backend returns to the frontend, which redirects the browser</td></tr>
+          <tr><td><code>status</code> / <code>payment_status</code></td><td><code>open</code> / <code>unpaid</code></td><td>Nothing has been paid yet</td></tr>
+          <tr><td><code>subscription</code>, <code>customer</code></td><td><code>null</code></td><td>Filled in only after payment</td></tr>
+          <tr><td><code>expires_at</code></td><td>24 hours after <code>created</code></td><td>The link dies after that</td></tr>
+          <tr><td><code>metadata</code>, <code>client_reference_id</code></td><td>empty</td><td>The hook back into your own data. Put the user or org ID here.</td></tr>
+        </tbody>
+      </table></div>
+      <h3>Check the result after paying with the test card</h3>
+      <div class="code"><pre><code>stripe subscriptions list --limit 1</code></pre></div>
+      <p>The status is <code>active</code>. One detail that is easy to miss: the billing period dates live on the subscription item, not on the subscription.</p>
+      <div class="code"><pre><code>"items": { "data": [ {
+  "current_period_start": 1793904890,
+  "current_period_end":   1796496890,
+  "quantity": 1
+} ] }</code></pre></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="break">
+    <h2 id="break">Then they tried to break it</h2>
+    <p class="read">Stripe provides fake card numbers that behave in set ways. The engineer tried four of them on the same payment page. Pick one to see what happened.</p>
+    <div class="tester">
+      <div class="picks" role="group" aria-label="Choose a practice card">
+        <button type="button" class="pick" data-k="approved" aria-pressed="true">Approved</button>
+        <button type="button" class="pick" data-k="declined" aria-pressed="false">Declined</button>
+        <button type="button" class="pick" data-k="funds" aria-pressed="false">Not enough money</button>
+        <button type="button" class="pick" data-k="bank" aria-pressed="false">Extra bank check</button>
+      </div>
+      <div class="panel" aria-live="polite">
+        <div>
+          <h3>The customer sees</h3>
+          <p id="t-sees">Subscription confirmed. The browser returns to the app.</p>
+          <p class="card" id="t-card">Practice card ending 4242</p>
+        </div>
+        <div>
+          <h3>Stripe sends the app</h3>
+          <div class="evs" id="t-evs"><span class="ev">customer.created</span><span class="ev">customer.subscription.created</span><span class="ev">invoice.paid</span><span class="ev">checkout.session.completed</span></div>
+          <p class="more" id="t-more">plus 8 more kinds, each arriving twice</p>
+        </div>
+        <div>
+          <h3>What gets created</h3>
+          <ul class="made" id="t-made">
+            <li><span class="dot yes"></span><span>Customer record</span></li>
+            <li><span class="dot yes"></span><span>Subscription</span></li>
+            <li><span class="dot yes"></span><span>Invoice</span></li>
+          </ul>
+        </div>
+      </div>
+      <p class="note" id="t-note">Everything is created, but only after the payment succeeds.</p>
+    </div>
+    <p class="callout"><b>The finding that mattered most:</b> a failed first payment leaves nothing behind. No customer record, no subscription, no invoice. The software has nothing to clean up, and the customer can simply try again. Failed payments in later months are a different case, and have not been tested yet.</p>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <h3>The test cards, on one Checkout page, in this order</h3>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>Card</th><th>What happened</th></tr></thead>
+        <tbody>
+          <tr><td><code>4000 0000 0000 0002</code></td><td>"Your credit card was declined"</td></tr>
+          <tr><td><code>4000 0000 0000 9995</code></td><td>Declined for insufficient funds</td></tr>
+          <tr><td><code>4000 0025 0000 3155</code></td><td>A test 3D Secure window. Clicking Complete succeeded.</td></tr>
+          <tr><td><code>4242 4242 4242 4242</code></td><td>Succeeds (used for the first subscription)</td></tr>
+        </tbody>
+      </table></div>
+      <p>Use any future expiry and any 3-digit CVC. In the event stream the failures produced only <code>payment_intent.payment_failed</code> and <code>charge.failed</code>. The <code>invoice.*</code> and <code>customer.subscription.*</code> events appeared only after the payment finally succeeded.</p>
+      <h3>The failure flow</h3>
+      <div class="diagram"><pre class="mermaid">flowchart TD
+  A["Customer submits card on the Stripe page"] --&gt; B{"Bank result"}
+  B --&gt;|"Declined or insufficient funds"| C["payment_intent.payment_failed&lt;br/&gt;charge.failed"]
+  C --&gt; D["Page shows an error and stays open"]
+  D --&gt; A
+  C --&gt; N["No customer, subscription or invoice exists"]
+  B --&gt;|"Needs authentication"| E["payment_intent.requires_action"]
+  E --&gt; F["3D Secure window: Complete"]
+  F --&gt; G["charge.succeeded&lt;br/&gt;payment_intent.succeeded"]
+  B --&gt;|"Approved"| G
+  G --&gt; H["customer.subscription.created&lt;br/&gt;invoice.paid&lt;br/&gt;checkout.session.completed"]
+  H --&gt; I["Backend webhook saves state"]</pre></div>
+      <p class="hint">Swipe sideways to see the whole diagram.</p>
+      <p>So <code>invoice.payment_failed</code>, the event Stripe's guide lists, belongs to renewals and not to the first payment. That is expected, not yet verified.</p>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="surprises">
+    <h2 id="surprises">Four surprises</h2>
+    <div class="surprises">
+      <div><h3>One purchase sends twelve kinds of message</h3><p>Each kind arrived twice. The app only needs about three of them: the subscription was created, the invoice was paid, and checkout finished.</p></div>
+      <div><h3>Messages arrive in no fixed order</h3><p>"Invoice paid" showed up before "customer created". Any plan that assumes an order will break, so the app has to read what each message says.</p></div>
+      <div><h3>The payment page is not the subscription</h3><p>It is an open order form. The subscription only exists once the customer has paid, which is why the app waits for Stripe's message instead of trusting the browser.</p></div>
+      <div><h3>One default setting was a business decision</h3><p>An account setting about who counts as the legal seller blocked the first test. The engineer worked around it for that single test and wrote it down as a question instead of changing it, because it affects tax and accounting.</p></div>
+    </div>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <h3>The event firehose</h3>
+      <p>One successful checkout produced 12 distinct events, each delivered twice: once as <code>name</code> and once as <code>v1.name</code>. The <code>v1.</code> copies look like the same events in Stripe's newer format. That is inferred and not confirmed, so they were ignored. Arrival order is not logical order: <code>invoice.paid</code> arrived before <code>customer.created</code>, and <code>checkout.session.completed</code> arrived before <code>invoice.created</code>.</p>
+      <div class="code"><pre><code>stripe listen
+
+--&gt; customer.created
+--&gt; customer.subscription.created
+--&gt; invoice.paid
+--&gt; checkout.session.completed
+--&gt; payment_intent.succeeded
+--&gt; charge.succeeded
+...and 5 more kinds, each delivered twice</code></pre></div>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>Event</th><th>Needed?</th></tr></thead>
+        <tbody>
+          <tr><td><code>customer.subscription.created</code></td><td>Yes</td></tr>
+          <tr><td><code>invoice.paid</code></td><td>Yes. Stripe's guide says to wait for this before granting access.</td></tr>
+          <tr><td><code>checkout.session.completed</code></td><td>Yes, to link the purchase to your own user or org. Not enough alone for access.</td></tr>
+          <tr><td>the other nine (<code>invoice.created</code>, <code>payment_intent.*</code>, <code>charge.succeeded</code>, ...)</td><td>No. The three above carry what you need.</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="build">
+    <h2 id="build">What the engineer would actually build</h2>
+    <p class="read">After a few hours the picture was clear enough to draw. Only three pieces are code the engineer has to write: a small request that asks Stripe for the payment page, a listener that receives Stripe's messages, and the bookkeeping that records the result. Everything else is screens or runs on Stripe's side.</p>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <h3>Who does what</h3>
+      <div class="diagram"><pre class="mermaid">flowchart TB
+  subgraph FE["Your frontend"]
+    A1["(1) Click Subscribe&lt;br/&gt;plan or credit pack"]
+    A4["(4) Redirect browser&lt;br/&gt;to the Stripe URL"]
+    A10["(10) Billing page&lt;br/&gt;asks backend for status"]
+  end
+  subgraph BE["Your backend"]
+    B2["(2) Create session endpoint&lt;br/&gt;org ID in metadata"]
+    B8["(8) Webhook endpoint&lt;br/&gt;verify, dedupe, route"]
+    B9["(9) Update your DB&lt;br/&gt;plan, status, credits"]
+  end
+  subgraph ST["Stripe (hosted, no code)"]
+    S3["(3) Checkout Session&lt;br/&gt;returns a payment URL"]
+    S5["(5) Customer pays&lt;br/&gt;card, 3D Secure"]
+    S6["(6) Creates customer,&lt;br/&gt;subscription, invoice"]
+    S7["(7) Sends webhook events"]
+  end
+  A1 --&gt; B2
+  B2 --&gt; S3
+  B2 --&gt;|"returns url"| A4
+  A4 --&gt; S5
+  S5 --&gt; S6 --&gt; S7 --&gt; B8 --&gt; B9
+  A10 --&gt;|"reads"| B9
+  classDef code fill:#DDF1EE,stroke:#0B7A75,color:#05403D
+  class B2,B8,B9 code</pre></div>
+      <p class="hint">Swipe sideways to see the whole diagram.</p>
+      <p>The shaded boxes (2, 8 and 9) are the backend code to write.</p>
+      <h3>Six design rules that came out of the experiments</h3>
+      <ol class="rules">
+        <li><b>Webhooks are the source of truth</b>, not the redirect to <code>success_url</code>. The browser can close, lie or be slow.</li>
+        <li><b>Don't rely on event order.</b> Read the payload.</li>
+        <li><b>Deduplicate on the <code>evt_</code> ID.</b> Events can repeat.</li>
+        <li><b>Verify the signature</b> with the <code>whsec_</code> secret.</li>
+        <li><b>A webhook has no login and no user.</b> Put your own user or org ID on the Stripe objects (<code>metadata</code> or <code>client_reference_id</code>) when creating the session, or the webhook cannot say whose payment it is.</li>
+        <li><b>Wait for <code>invoice.paid</code></b>, not just <code>checkout.session.completed</code>, before granting access.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="method">
+    <h2 id="method">A method you can borrow for any new tool</h2>
+    <p class="read">Nothing here is specific to payments. These nine steps work for learning any unfamiliar system before you commit to building on it.</p>
+    <ol class="method">
+      <li>Learn the vocabulary before the instructions.</li>
+      <li>Practise in a safe copy of the real thing.</li>
+      <li>Do it by hand before automating anything.</li>
+      <li>Watch the messages the system produces.</li>
+      <li>Do one successful run and read what it created.</li>
+      <li>Learn which messages matter and ignore the rest.</li>
+      <li>Break it on purpose and note what is not created.</li>
+      <li>Draw who does what.</li>
+      <li>Write down what you don't know, each with a default.</li>
+    </ol>
+  </section>
+
+  <section class="sec" aria-labelledby="questions">
+    <h2 id="questions">Questions still to answer</h2>
+    <p class="read">These belong to whoever owns the product. Each has a working default so the engineer is never stuck waiting.</p>
+    <div class="tablewrap qtable">
+      <table class="min">
+        <thead><tr><th>Question</th><th>Default for now</th></tr></thead>
+        <tbody>
+          <tr><td>Is the "Team" plan one flat price, or a price per person? The mock-up showed both.</td><td>A price per person (a quantity on a per-unit price)</td></tr>
+          <tr><td>Do customers pay on Stripe's page, or inside the app?</td><td>Stripe's hosted Checkout page first</td></tr>
+          <tr><td>Should Stripe act as the legal seller on the account (Managed Payments)?</td><td>Off per session in the sandbox. A business decision.</td></tr>
+          <tr><td>Which payment types should be accepted? Checkout offered six.</td><td>Cards only, to confirm</td></tr>
+          <tr><td>Should the software look prices up by name (<code>lookup_key</code>) instead of copying long IDs?</td><td>Yes</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec" aria-labelledby="notyet">
+    <h2 id="notyet">Not done yet</h2>
+    <p class="read">The engineer prefers to say so rather than imply the job is finished.</p>
+    <ul class="todo">
+      <li>A free trial period.</li>
+      <li>A time machine for the practice account (Stripe test clocks), to simulate future months, renewals and renewals that fail. This is where <code>invoice.payment_failed</code> should show up.</li>
+      <li>The customer self-service page (customer portal), where people update their card or cancel.</li>
+      <li>Per-person pricing and mid-month upgrades, with proration.</li>
+      <li>One-time credit packs.</li>
+      <li>Automatic top-up using a saved card.</li>
+    </ul>
+  </section>
+
+  <section class="sec" aria-labelledby="gloss">
+    <h2 id="gloss">Words used on this page</h2>
+    <dl class="gloss">
+      <dt>Sandbox</dt><dd>A practice copy of Stripe where nothing is real and no money moves.</dd>
+      <dt>Subscription</dt><dd>A customer's ongoing plan that is charged on a schedule.</dd>
+      <dt>Invoice</dt><dd>The bill created for each billing period.</dd>
+      <dt>Webhook</dt><dd>A message Stripe sends to the app when something happens, such as a payment succeeding.</dd>
+      <dt>Event</dt><dd>One of those messages. Each has a name such as <code>invoice.paid</code> and an ID starting with <code>evt_</code>.</dd>
+      <dt>Checkout</dt><dd>The payment page Stripe hosts, where the customer enters their card.</dd>
+      <dt>Test card</dt><dd>A fake card number that makes the practice account behave in a chosen way.</dd>
+      <dt>Metadata</dt><dd>A note the app attaches to a record so it can recognise it later.</dd>
+      <dt>3D Secure</dt><dd>An extra identity check some banks require before a card payment goes through.</dd>
+    </dl>
+  </section>
+
+  <section class="sec" aria-labelledby="eng">
+    <h2 id="eng">Everything is in the repo</h2>
+    <p class="read">The full project is public: <a href="https://github.com/eshan-one/stripe-billing-101">github.com/eshan-one/stripe-billing-101</a>. It has the complete guide, trimmed sample responses and the event logs.</p>
+    <div class="tech">
+      <span class="tl">Technical detail</span>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>What</th><th>Link</th></tr></thead>
+        <tbody>
+          <tr><td>Repo home, progress and layout</td><td><a href="https://github.com/eshan-one/stripe-billing-101">README</a></td></tr>
+          <tr><td>Day 1 guide: every command, expected output, findings, test cards, troubleshooting</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/docs/day-01/README.md">docs/day-01/README.md</a></td></tr>
+          <tr><td>Vocabulary, ID prefixes and webhook principles</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/docs/concepts.md">docs/concepts.md</a></td></tr>
+          <tr><td>Five Mermaid diagrams, including renewals and the object model</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/docs/architecture.md">docs/architecture.md</a></td></tr>
+          <tr><td>Stripe's official guide, section by section</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/docs/day-01/stripe-guide-coverage.md">docs/day-01/stripe-guide-coverage.md</a></td></tr>
+          <tr><td>Samples index (trimmed and anonymised)</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/README.md">samples/day-01/README.md</a></td></tr>
+          <tr><td>Product, price, Checkout Session and subscription responses</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/product.json">product.json</a>, <a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/price.json">price.json</a>, <a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/checkout-session.json">checkout-session.json</a>, <a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/subscription.json">subscription.json</a></td></tr>
+          <tr><td>The Managed Payments error</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/error-managed-payments.json">error-managed-payments.json</a></td></tr>
+          <tr><td>Event logs: first checkout, and failed payments with 3D Secure</td><td><a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/events-first-checkout.log">events-first-checkout.log</a>, <a href="https://github.com/eshan-one/stripe-billing-101/blob/main/samples/day-01/events-failed-payments-and-3ds.log">events-failed-payments-and-3ds.log</a></td></tr>
+        </tbody>
+      </table></div>
+      <h3>Clone it and run the guide in your own free sandbox</h3>
+      <div class="code"><pre><code>git clone https://github.com/eshan-one/stripe-billing-101.git</code></pre></div>
+      <h3>Pitfalls hit along the way</h3>
+      <div class="tablewrap"><table class="min">
+        <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+        <tbody>
+          <tr><td><code>zsh: no matches found: line_items[0]...</code></td><td>Quote the whole <code>-d "..."</code> argument</td></tr>
+          <tr><td><code>product tax code is missing ... Managed Payments</code></td><td>Pass <code>managed_payments[enabled]=false</code> for the session, and raise the account setting as a question</td></tr>
+          <tr><td>Checkout link fails</td><td>The session expired after 24 hours. Create a new one.</td></tr>
+          <tr><td>Every event appears twice</td><td>The <code>v1.</code> copies (looks like a newer event format)</td></tr>
+          <tr><td><code>stripe listen</code> shows nothing</td><td>It only prints when something happens in the sandbox</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </section>
+
+  <footer>
+    <p>Everything on this page was done in a practice (sandbox) account. No real money moved.</p>
+    <p>Independent learning notes. Not affiliated with Stripe.</p>
+  </footer>
+</div>
+
+<script>
+  (function () {
+    var page = document.getElementById("page");
+    var bTech = document.getElementById("d-tech");
+    var bPlain = document.getElementById("d-plain");
+    function setDetail(mode) {
+      page.setAttribute("data-detail", mode);
+      bTech.setAttribute("aria-pressed", String(mode === "tech"));
+      bPlain.setAttribute("aria-pressed", String(mode === "plain"));
+    }
+    bTech.addEventListener("click", function () { setDetail("tech"); });
+    bPlain.addEventListener("click", function () { setDetail("plain"); });
+
+    var CASES = {
+      approved: { card: "Practice card ending 4242", sees: "Subscription confirmed. The browser returns to the app.", events: ["customer.created", "customer.subscription.created", "invoice.paid", "checkout.session.completed"], more: "plus 8 more kinds, each arriving twice", made: [true, true, true], note: "Everything is created, but only after the payment succeeds." },
+      declined: { card: "Practice card ending 0002", sees: "\"Your credit card was declined.\" The page stays open for another try.", events: ["payment_intent.payment_failed", "charge.failed"], more: "", made: [false, false, false], note: "Nothing is created. The customer can try another card on the same page." },
+      funds: { card: "Practice card ending 9995", sees: "Declined because of insufficient funds. The page stays open.", events: ["charge.failed", "payment_intent.payment_failed"], more: "", made: [false, false, false], note: "Nothing is created, so the app has nothing to clean up." },
+      bank: { card: "Practice card ending 3155", sees: "A bank verification window opens. Choosing Complete lets the payment go through.", events: ["payment_intent.requires_action", "charge.succeeded", "customer.subscription.created", "invoice.paid"], more: "plus the rest of the usual set", made: [true, true, true], note: "The same result as an approved card, with one extra step for the customer." }
+    };
+    var LABELS = ["Customer record", "Subscription", "Invoice"];
+    var picks = document.querySelectorAll(".pick");
+    function show(key) {
+      var c = CASES[key];
+      document.getElementById("t-sees").textContent = c.sees;
+      document.getElementById("t-card").textContent = c.card;
+      var more = document.getElementById("t-more");
+      more.textContent = c.more;
+      more.hidden = !c.more;
+      document.getElementById("t-note").textContent = c.note;
+      var evs = document.getElementById("t-evs");
+      evs.textContent = "";
+      c.events.forEach(function (name) {
+        var s = document.createElement("span");
+        s.className = "ev";
+        s.textContent = name;
+        evs.appendChild(s);
+      });
+      var made = document.getElementById("t-made");
+      made.textContent = "";
+      LABELS.forEach(function (label, i) {
+        var li = document.createElement("li");
+        var dot = document.createElement("span");
+        dot.className = "dot " + (c.made[i] ? "yes" : "no");
+        var t = document.createElement("span");
+        t.textContent = c.made[i] ? label : label + ": not created";
+        if (!c.made[i]) t.className = "no-t";
+        li.appendChild(dot);
+        li.appendChild(t);
+        made.appendChild(li);
+      });
+      picks.forEach(function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-k") === key)); });
+    }
+    picks.forEach(function (b) {
+      b.addEventListener("click", function () { show(b.getAttribute("data-k")); });
+    });
+
+    document.querySelectorAll(".code").forEach(function (wrap) {
+      var pre = wrap.querySelector("pre");
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "copy";
+      btn.textContent = "Copy";
+      btn.addEventListener("click", function () {
+        var text = pre.innerText;
+        function selectIt() {
+          var r = document.createRange();
+          r.selectNodeContents(pre);
+          var sel = window.getSelection();
+          sel.removeAllRanges();
+          sel.addRange(r);
+          btn.textContent = "Selected";
+        }
+        try {
+          navigator.clipboard.writeText(text).then(function () { btn.textContent = "Copied"; }, selectIt);
+        } catch (e) { selectIt(); }
+        setTimeout(function () { btn.textContent = "Copy"; }, 1800);
+      });
+      wrap.appendChild(btn);
+    });
+  })();
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  (function () {
+    if (!window.mermaid) return;
+    var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    mermaid.initialize({ startOnLoad: false, theme: dark ? "dark" : "default", securityLevel: "strict", fontFamily: '"IBM Plex Sans", sans-serif' });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  })();
+</script>
+</body>
+</html>

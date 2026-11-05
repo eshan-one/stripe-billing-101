@@ -7,22 +7,22 @@ High-level map of how Stripe fits into a SaaS app. This is a **working model**: 
 Purple boxes are the backend code you write. Everything else is frontend work or hosted by Stripe.
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph FE["Your frontend"]
-    A1["1. Click Subscribe<br/>plan or credit pack"]
-    A4["4. Redirect browser<br/>to the Stripe URL"]
-    A10["10. Billing page<br/>asks backend for status"]
+    A1["(1) Click Subscribe<br/>plan or credit pack"]
+    A4["(4) Redirect browser<br/>to the Stripe URL"]
+    A10["(10) Billing page<br/>asks backend for status"]
   end
-  subgraph BE["Your backend (you write this)"]
-    B2["2. Create session endpoint<br/>org ID in metadata"]
-    B8["8. Webhook endpoint<br/>verify, dedupe, route"]
-    B9["9. Update your DB<br/>plan, status, credits"]
+  subgraph BE["Your backend"]
+    B2["(2) Create session endpoint<br/>org ID in metadata"]
+    B8["(8) Webhook endpoint<br/>verify, dedupe, route"]
+    B9["(9) Update your DB<br/>plan, status, credits"]
   end
   subgraph ST["Stripe (hosted, no code)"]
-    S3["3. Checkout Session<br/>returns a payment URL"]
-    S5["5. Customer pays<br/>card, 3D Secure"]
-    S6["6. Creates customer,<br/>subscription, invoice"]
-    S7["7. Sends webhook events"]
+    S3["(3) Checkout Session<br/>returns a payment URL"]
+    S5["(5) Customer pays<br/>card, 3D Secure"]
+    S6["(6) Creates customer,<br/>subscription, invoice"]
+    S7["(7) Sends webhook events"]
   end
   A1 --> B2
   B2 --> S3
