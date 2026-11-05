@@ -1,0 +1,28 @@
+Output of `stripe listen` during the first successful subscription (card 4242 4242 4242 4242).
+24 lines = 12 distinct events, each delivered twice: once as `name` and once as `v1.name`.
+Events arrive out of logical order: do not rely on ordering. IDs replaced by evt_EXAMPLE.
+
+00:24:53   --> charge.succeeded [evt_EXAMPLE]
+00:24:53   --> invoice.finalized [evt_EXAMPLE]
+00:24:53   --> v1.invoice.finalized [evt_EXAMPLE]
+00:24:53   --> payment_method.attached [evt_EXAMPLE]
+00:24:53   --> invoice.paid [evt_EXAMPLE]
+00:24:53   --> customer.created [evt_EXAMPLE]
+00:24:53   --> v1.invoice.paid [evt_EXAMPLE]
+00:24:54   --> customer.updated [evt_EXAMPLE]
+00:24:54   --> v1.charge.succeeded [evt_EXAMPLE]
+00:24:54   --> checkout.session.completed [evt_EXAMPLE]
+00:24:54   --> payment_intent.succeeded [evt_EXAMPLE]
+00:24:54   --> v1.payment_method.attached [evt_EXAMPLE]
+00:24:54   --> customer.subscription.created [evt_EXAMPLE]
+00:24:54   --> v1.customer.created [evt_EXAMPLE]
+00:24:54   --> v1.customer.updated [evt_EXAMPLE]
+00:24:54   --> payment_intent.created [evt_EXAMPLE]
+00:24:54   --> v1.customer.subscription.created [evt_EXAMPLE]
+00:24:54   --> v1.payment_intent.created [evt_EXAMPLE]
+00:24:54   --> v1.payment_intent.succeeded [evt_EXAMPLE]
+00:24:54   --> v1.checkout.session.completed [evt_EXAMPLE]
+00:24:54   --> invoice.created [evt_EXAMPLE]
+00:24:54   --> invoice.payment_succeeded [evt_EXAMPLE]
+00:24:54   --> v1.invoice.created [evt_EXAMPLE]
+00:24:54   --> v1.invoice.payment_succeeded [evt_EXAMPLE]

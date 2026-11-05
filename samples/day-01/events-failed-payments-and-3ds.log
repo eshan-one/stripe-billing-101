@@ -1,0 +1,40 @@
+Output of `stripe listen`: one Checkout page, three cards tried in this order:
+  00:37  4000 0000 0000 0002   declined
+  00:38  4000 0000 0000 9995   insufficient funds
+  00:39  4000 0025 0000 3155   3D Secure, "Complete" clicked
+No customer, subscription or invoice event appears until the payment succeeds at 00:39:13.
+`v2.signals.account_signal.customer_risk_ready` is a Stripe risk notice: ignore.
+IDs replaced by evt_EXAMPLE.
+
+00:37:37   --> payment_intent.payment_failed [evt_EXAMPLE]
+00:37:37   --> v1.payment_intent.payment_failed [evt_EXAMPLE]
+00:37:47   --> charge.failed [evt_EXAMPLE]
+00:37:47   --> v2.signals.account_signal.customer_risk_ready [evt_EXAMPLE]
+00:37:47   --> payment_intent.payment_failed [evt_EXAMPLE]
+00:37:48   --> v1.charge.failed [evt_EXAMPLE]
+00:37:48   --> v1.payment_intent.payment_failed [evt_EXAMPLE]
+00:38:28   --> charge.failed [evt_EXAMPLE]
+00:38:29   --> payment_intent.payment_failed [evt_EXAMPLE]
+00:38:29   --> v1.charge.failed [evt_EXAMPLE]
+00:38:29   --> v1.payment_intent.payment_failed [evt_EXAMPLE]
+00:39:00   --> v2.signals.account_signal.customer_risk_ready [evt_EXAMPLE]
+00:39:01   --> payment_intent.requires_action [evt_EXAMPLE]
+00:39:01   --> v1.payment_intent.requires_action [evt_EXAMPLE]
+00:39:13   --> charge.succeeded [evt_EXAMPLE]
+00:39:13   --> payment_method.attached [evt_EXAMPLE]
+00:39:13   --> payment_intent.succeeded [evt_EXAMPLE]
+00:39:13   --> v1.payment_intent.succeeded [evt_EXAMPLE]
+00:39:13   --> v1.charge.succeeded [evt_EXAMPLE]
+00:39:13   --> v1.payment_method.attached [evt_EXAMPLE]
+00:39:16   --> checkout.session.completed [evt_EXAMPLE]
+00:39:16   --> invoice.created [evt_EXAMPLE]
+00:39:16   --> v1.checkout.session.completed [evt_EXAMPLE]
+00:39:17   --> invoice.finalized [evt_EXAMPLE]
+00:39:17   --> v1.invoice.created [evt_EXAMPLE]
+00:39:17   --> invoice.paid [evt_EXAMPLE]
+00:39:17   --> v1.invoice.finalized [evt_EXAMPLE]
+00:39:17   --> v1.invoice.paid [evt_EXAMPLE]
+00:39:17   --> invoice.payment_succeeded [evt_EXAMPLE]
+00:39:17   --> customer.subscription.created [evt_EXAMPLE]
+00:39:17   --> v1.invoice.payment_succeeded [evt_EXAMPLE]
+00:39:17   --> v1.customer.subscription.created [evt_EXAMPLE]

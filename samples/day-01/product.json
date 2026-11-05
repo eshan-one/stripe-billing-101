@@ -1,0 +1,19 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "prod_EXAMPLE",
+      "object": "product",
+      "active": true,
+      "default_price": "price_EXAMPLE",
+      "description": null,
+      "livemode": false,
+      "metadata": {},
+      "name": "Plus",
+      "tax_code": null,
+      "type": "service"
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/products"
+}

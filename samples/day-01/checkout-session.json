@@ -1,0 +1,43 @@
+{
+  "id": "cs_test_EXAMPLE",
+  "object": "checkout.session",
+  "adaptive_pricing": {
+    "enabled": true
+  },
+  "amount_subtotal": 800,
+  "amount_total": 800,
+  "automatic_tax": {
+    "enabled": false
+  },
+  "cancel_url": null,
+  "client_reference_id": null,
+  "created": 1793903482,
+  "currency": "usd",
+  "customer": null,
+  "customer_creation": "always",
+  "customer_details": null,
+  "customer_email": null,
+  "discounts": [],
+  "expires_at": 1793989882,
+  "invoice": null,
+  "livemode": false,
+  "managed_payments": {
+    "enabled": false
+  },
+  "metadata": {},
+  "mode": "subscription",
+  "payment_intent": null,
+  "payment_method_collection": "always",
+  "payment_method_types": ["card", "klarna", "link", "cashapp", "amazon_pay"],
+  "payment_status": "unpaid",
+  "status": "open",
+  "subscription": null,
+  "success_url": "https://example.com/success",
+  "total_details": {
+    "amount_discount": 0,
+    "amount_shipping": 0,
+    "amount_tax": 0
+  },
+  "ui_mode": "hosted_page",
+  "url": "https://checkout.stripe.com/c/pay/cs_test_EXAMPLE#REDACTED"
+}
